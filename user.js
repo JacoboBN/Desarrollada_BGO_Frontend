@@ -1529,6 +1529,7 @@ function buildDatabaseComparisonEmailPayload(comparison = {}) {
     `Diferencia total: ${formatAmountEuro(difference)}`,
     `Factura en Drive: ${facturaLink || 'No disponible'}`
   ];
+  const isWarningComparison = !result.ok && (result.warning || result.severity === 'warning');
 
   if (result.ok) {
     return {
@@ -1559,6 +1560,46 @@ function buildDatabaseComparisonEmailPayload(comparison = {}) {
           <p><strong>Factura original:</strong> ${facturaLink ? `<a href="${escapeHtml(facturaLink)}">Abrir en Drive</a>` : 'No disponible'}</p>
           <h3>Albaranes correctos</h3><ul>${toNotificationHtmlList(matchedLines, formatComparisonLineHtml)}</ul>
           <h3>Totales por albarán</h3><ul>${toNotificationHtmlList(totalsLines, formatAlbaranTotalComparisonLineHtml)}</ul>
+        </div>`
+    };
+  }
+
+  if (isWarningComparison) {
+    return {
+      notificationType: 'comparison_mismatch',
+      fileName,
+      subject: `🟡 ${fileName} diferencias menores a revisar`,
+      text: [
+        'AVISO DE COMPARACIÓN: DIFERENCIAS MENORES',
+        '',
+        ...common,
+        '',
+        '=== DIFERENCIAS MENORES A REVISAR ===',
+        ...issueLines,
+        '',
+        '=== TOTALES POR ALBARÁN ===',
+        ...totalsLines,
+        '',
+        '=== ALBARANES CON DIFERENCIAS MENORES ===',
+        ...mismatchLines,
+        '',
+        'Se detectaron diferencias de solo 1 céntimo. Conviene revisarlas, pero no se tratan como una alerta crítica.'
+      ].join('\n'),
+      html: `
+        <div style="font-family:Arial,sans-serif;color:#222;line-height:1.5;max-width:760px;">
+          <h2 style="color:#b7791f;">🟡 Diferencias menores a revisar</h2>
+          <p><strong>Factura:</strong> ${escapeHtml(fileName)}</p>
+          <p><strong>Número:</strong> ${escapeHtml(invoice.invoiceNumber || 'No disponible')}</p>
+          <p><strong>Total factura:</strong> ${escapeHtml(formatAmountEuro(facturaTotal))}</p>
+          <p><strong>Total albaranes:</strong> ${escapeHtml(formatAmountEuro(albaranesTotal))}</p>
+          <p><strong>Diferencia:</strong> ${escapeHtml(formatAmountEuro(difference))}</p>
+          <p><strong>Factura original:</strong> ${facturaLink ? `<a href="${escapeHtml(facturaLink)}">Abrir en Drive</a>` : 'No disponible'}</p>
+          <div style="background:#fffaf0;border:1px solid #f6d365;border-radius:8px;padding:12px;margin:12px 0;">
+            <p style="margin:0;">Se detectaron diferencias de solo 1 céntimo. Conviene revisarlas, pero no se tratan como una alerta crítica.</p>
+          </div>
+          <h3>Diferencias menores a revisar</h3><ul>${toNotificationHtmlList(issueLines, escapeHtml)}</ul>
+          <h3>Totales por albarán</h3><ul>${toNotificationHtmlList(totalsLines, formatAlbaranTotalComparisonLineHtml)}</ul>
+          <h3>Albaranes con diferencias menores</h3><ul>${toNotificationHtmlList(mismatchLines, formatComparisonLineHtml)}</ul>
         </div>`
     };
   }
@@ -1615,7 +1656,7 @@ async function sendDatabaseComparisonEmailIfNeeded(comparison = {}) {
     metadata: {
       dedupeKey: {
         invoiceId: invoice.id || comparison.invoiceId || null,
-        status: result.ok ? 'matched' : 'mismatch',
+        status: result.warning ? 'warning' : (result.ok ? 'matched' : 'mismatch'),
         facturaTotal: result.facturaTotal ?? null,
         sumatoriaTotalesAlbaranes: result.sumatoriaTotalesAlbaranes ?? null,
         issues: result.issues || [],

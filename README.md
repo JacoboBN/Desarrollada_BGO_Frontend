@@ -12,7 +12,7 @@ Aplicación de escritorio Electron para gestionar facturas y albaranes con Googl
 - Persistencia de las extracciones de IA en PostgreSQL y comparación de facturas contra albaranes por totales desde la base de datos.
 - Comparación automática de documentos relacionados, independientemente del orden de subida; Drive solo representa su estado visual (`No procesado`, `No comparado`, `Documentos`).
 - Botón temporal de pruebas para vaciar los datos operativos de PostgreSQL con confirmación explícita, sin borrar tablas ni migraciones.
-- Envío de emails de resultado mediante Gmail autenticado. Solo se notifica la comparación cuando una factura tiene todos sus albaranes relacionados: verde si los totales coinciden y rojo si no. La calidad documental clasifica campos como `mortal`, `critico`, `medio` o `indiferente`: el aviso `🚨` se reserva para número, total o referencias imprescindibles ausentes, o `confidence < 0.60`; los avisos no mortales no generan emails automáticos.
+- Envío de emails de resultado mediante Gmail autenticado. Solo se notifica la comparación cuando una factura tiene todos sus albaranes relacionados: verde si no hay diferencias, amarillo si solo hay diferencias de 1 céntimo y rojo si existe alguna diferencia de 2 céntimos o más. La calidad documental clasifica campos como `mortal`, `critico`, `medio` o `indiferente`: el aviso `🚨` se reserva para número, total o referencias imprescindibles ausentes, o `confidence < 0.60`; los avisos no mortales no generan emails automáticos.
 - Actualización automática con `electron-updater` y releases de GitHub.
 
 ## Requisitos
