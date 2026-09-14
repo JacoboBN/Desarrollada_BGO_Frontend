@@ -2422,6 +2422,67 @@ ipcMain.handle('get-database-view', async (event, tableName = null, limit = 100)
   }
 });
 
+async function callFoodOrderBackend(pathname, payload = {}, fallbackMessage, options = {}) {
+  const sessionId = store.get('sessionId');
+  if (!sessionId) throw new Error('Sesión requerida para gestionar pedidos');
+  try {
+    const response = await postWithRetry(`${BACKEND_URL}${pathname}`, {
+      sessionId,
+      ...payload
+    }, { timeout: 30000, retries: options.retries ?? 1 });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || error.message || fallbackMessage);
+  }
+}
+
+ipcMain.handle('food-categories-list', async () => (
+  callFoodOrderBackend('/food/categories/list', {}, 'No se pudieron cargar las categorías')
+));
+
+ipcMain.handle('food-category-create', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/categories/create', { name: payload.name }, 'No se pudo crear la categoría')
+));
+
+ipcMain.handle('food-suppliers-list', async () => (
+  callFoodOrderBackend('/food/suppliers/list', {}, 'No se pudieron cargar los proveedores')
+));
+
+ipcMain.handle('food-supplier-create', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/suppliers/create', payload, 'No se pudo crear el proveedor')
+));
+
+ipcMain.handle('food-products-list', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/products/list', {
+    search: payload.search || '',
+    categoryIds: Array.isArray(payload.categoryIds) ? payload.categoryIds : [],
+    includeInactive: payload.includeInactive === true
+  }, 'No se pudieron cargar los productos')
+));
+
+ipcMain.handle('food-product-create', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/products/create', payload, 'No se pudo crear el producto')
+));
+
+ipcMain.handle('food-order-create', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/orders/create', {
+    items: Array.isArray(payload.items) ? payload.items : [],
+    notes: payload.notes || ''
+  }, 'No se pudo preparar el pedido')
+));
+
+ipcMain.handle('food-order-status', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/orders/status', { orderId: payload.orderId }, 'No se pudo cargar el pedido')
+));
+
+ipcMain.handle('food-order-email-update', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/orders/email/update', payload, 'No se pudo actualizar el borrador')
+));
+
+ipcMain.handle('food-order-email-send', async (event, payload = {}) => (
+  callFoodOrderBackend('/food/orders/email/send', { emailId: payload.emailId }, 'No se pudo enviar el email', { retries: 0 })
+));
+
 ipcMain.handle('compare-invoice-database', async (event, payload = {}) => {
   const sessionId = store.get('sessionId');
   if (!sessionId) throw new Error('Sesión requerida para comparar por base de datos');

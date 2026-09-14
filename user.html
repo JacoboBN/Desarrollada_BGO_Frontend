@@ -1123,6 +1123,68 @@
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
+
+    .food-order-view {
+      display: none;
+      background: #fff;
+      border: 1px solid #d7d7d7;
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 420px;
+    }
+
+    .food-order-view.active { display: block; }
+    .food-order-header, .food-order-toolbar, .food-order-actions, .food-modal-actions,
+    .food-email-header, .food-category-list, .food-order-summary-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .food-order-header { justify-content: space-between; margin-bottom: 14px; }
+    .food-order-header h2 { font-size: 22px; }
+    .food-order-subtitle { color: #666; font-size: 13px; margin-top: 4px; }
+    .food-order-toolbar { justify-content: space-between; margin-bottom: 14px; }
+    .food-product-search { min-width: 260px; padding: 9px 10px; border: 1px solid #c7c7c7; border-radius: 7px; }
+    .food-category-list { margin-bottom: 16px; }
+    .food-category-btn { border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; border-radius: 16px; padding: 6px 11px; cursor: pointer; font-size: 13px; }
+    .food-category-btn.active { background: #007bff; border-color: #007bff; color: #fff; }
+    .food-products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 14px; padding-bottom: 76px; }
+    .food-product-card { border: 1px solid #d6dce4; border-radius: 10px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+    .food-product-name { font-size: 17px; font-weight: 700; color: #1f2937; }
+    .food-product-meta { color: #5b6470; font-size: 13px; line-height: 1.45; }
+    .food-quantity-row { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 14px; font-weight: 600; }
+    .food-quantity-input { width: 90px; padding: 8px; border: 1px solid #aeb8c4; border-radius: 6px; font-size: 15px; }
+    .food-empty { padding: 34px; text-align: center; color: #667085; border: 1px dashed #cbd5e1; border-radius: 10px; }
+    .food-order-add-btn { position: fixed; right: 28px; bottom: 24px; z-index: 50; box-shadow: 0 8px 20px rgba(0, 123, 255, .28); }
+    .food-modal { position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, .5); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .food-modal.active { display: flex; }
+    .food-modal-card { background: #fff; border-radius: 12px; width: min(720px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 20px; box-shadow: 0 16px 42px rgba(0,0,0,.26); }
+    .food-modal-card.wide { width: min(920px, 100%); }
+    .food-modal-title { font-weight: 700; font-size: 21px; margin-bottom: 14px; }
+    .food-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .food-form-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: #374151; }
+    .food-form-field.full { grid-column: 1 / -1; }
+    .food-form-field input, .food-form-field select, .food-form-field textarea { width: 100%; border: 1px solid #b9c2ce; border-radius: 6px; padding: 9px; font: inherit; font-weight: normal; }
+    .food-form-field textarea { min-height: 105px; resize: vertical; }
+    .food-category-checks { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 8px; border: 1px solid #d6dce4; border-radius: 6px; max-height: 130px; overflow: auto; }
+    .food-category-checks label { font-size: 13px; font-weight: normal; display: flex; align-items: center; gap: 4px; }
+    .food-modal-actions { justify-content: flex-end; margin-top: 18px; }
+    .food-order-summary-group { border: 1px solid #dbe3ec; border-radius: 8px; padding: 12px; margin: 10px 0; }
+    .food-order-summary-group h4 { margin-bottom: 7px; }
+    .food-order-summary-group ul { margin-left: 18px; line-height: 1.6; }
+    .food-email-counter { margin-left: auto; background: #e8f2ff; color: #0056b3; border-radius: 16px; padding: 6px 11px; font-weight: 700; font-size: 13px; }
+    .food-email-card { border: 1px solid #d6dce4; border-radius: 10px; padding: 14px; margin: 12px 0; }
+    .food-email-card.sent { background: #f0fdf4; border-color: #86efac; }
+    .food-email-card.error { border-color: #fca5a5; }
+    .food-email-header { justify-content: space-between; margin-bottom: 10px; }
+    .food-email-supplier { font-weight: 700; font-size: 16px; }
+    .food-email-status { font-size: 12px; font-weight: 700; border-radius: 12px; padding: 4px 8px; background: #e5e7eb; }
+    .food-email-card.sent .food-email-status { background: #bbf7d0; color: #166534; }
+    .food-email-card.error .food-email-status { background: #fee2e2; color: #b91c1c; }
+    .food-email-preview { white-space: pre-wrap; line-height: 1.45; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 13px; }
+    .food-email-error { color: #b91c1c; font-size: 13px; margin-top: 8px; }
+    @media (max-width: 650px) { .food-form-grid { grid-template-columns: 1fr; } .food-order-add-btn { right: 12px; bottom: 12px; } }
   </style>
 </head>
 <body>
@@ -1265,6 +1327,7 @@
 
           <section class="dashboard">
             <button class="tile disabled" data-action="centros" disabled>Centros</button>
+            <button class="tile" data-action="pedir">PEDIR</button>
             <button class="tile" data-action="bases-datos">Bases de datos</button>
 
 
@@ -1273,6 +1336,25 @@
           </section>
 
           <section class="content">
+            <div id="food-order-view" class="food-order-view" aria-live="polite">
+              <div class="food-order-header">
+                <div>
+                  <h2>Pedir</h2>
+                  <div class="food-order-subtitle">Selecciona cantidades, prepara los borradores y revisa cada email antes de enviarlo.</div>
+                </div>
+                <div class="food-order-actions">
+                  <button class="btn btn-secondary small" id="food-add-supplier-btn" type="button">Añadir proveedor</button>
+                  <button class="btn small" id="food-add-product-btn" type="button">Añadir producto</button>
+                </div>
+              </div>
+              <div class="food-order-toolbar">
+                <input id="food-product-search" class="food-product-search" type="search" placeholder="Buscar producto..." />
+                <button class="btn btn-secondary small" id="food-refresh-btn" type="button">Recargar</button>
+              </div>
+              <div id="food-category-list" class="food-category-list"></div>
+              <div id="food-products-grid" class="food-products-grid"></div>
+              <button class="btn food-order-add-btn" id="food-order-add-btn" type="button">Añadir al pedido</button>
+            </div>
             <div id="database-view" class="database-view" aria-live="polite">
               <div class="database-header">
                 <div class="database-title">
@@ -1321,6 +1403,59 @@
           </section>
 
         </main>
+      </div>
+    </div>
+
+    <div class="food-modal" id="food-supplier-modal" aria-hidden="true">
+      <div class="food-modal-card" role="dialog" aria-modal="true" aria-labelledby="food-supplier-modal-title">
+        <div class="food-modal-title" id="food-supplier-modal-title">Añadir proveedor</div>
+        <form id="food-supplier-form">
+          <div class="food-form-grid">
+            <label class="food-form-field full">Nombre del proveedor *<input id="food-supplier-name" required maxlength="300" /></label>
+            <label class="food-form-field">Email general<input id="food-supplier-email" type="email" maxlength="320" /></label>
+            <label class="food-form-field">Email para pedidos *<input id="food-supplier-order-email" type="email" maxlength="320" required /></label>
+            <label class="food-form-field">Nombre de contacto para pedidos<input id="food-supplier-contact-name" maxlength="160" placeholder="Ej.: Arturo" /></label>
+            <label class="food-form-field">Teléfono<input id="food-supplier-phone" maxlength="80" /></label>
+            <label class="food-form-field">CIF<input id="food-supplier-cif" maxlength="50" /></label>
+            <label class="food-form-field">Dirección<input id="food-supplier-address" maxlength="500" /></label>
+          </div>
+          <div class="food-modal-actions"><button class="btn btn-secondary" type="button" data-food-close="food-supplier-modal">Cancelar</button><button class="btn" type="submit">Guardar proveedor</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="food-modal" id="food-product-modal" aria-hidden="true">
+      <div class="food-modal-card" role="dialog" aria-modal="true" aria-labelledby="food-product-modal-title">
+        <div class="food-modal-title" id="food-product-modal-title">Añadir producto</div>
+        <form id="food-product-form">
+          <div class="food-form-grid">
+            <label class="food-form-field full">Nombre del producto *<input id="food-product-name" required maxlength="300" /></label>
+            <label class="food-form-field">Métrica *
+              <select id="food-product-metric" required><option value="Kg">Kg</option><option value="Gr">Gr</option><option value="Litro">Litro</option><option value="Unidad">Unidad</option><option value="Caja">Caja</option><option value="Botella">Botella</option><option value="Paquete">Paquete</option></select>
+            </label>
+            <label class="food-form-field">Proveedor *<select id="food-product-supplier" required></select></label>
+            <label class="food-form-field full">Email para este producto <input id="food-product-email-override" type="email" maxlength="320" placeholder="Se usará el email de pedidos del proveedor si se deja vacío" /></label>
+            <div class="food-form-field full">Categorías<div class="food-category-checks" id="food-product-category-checks"></div></div>
+            <label class="food-form-field full">Notas<input id="food-product-notes" maxlength="1000" /></label>
+          </div>
+          <div class="food-modal-actions"><button class="btn btn-secondary" type="button" data-food-close="food-product-modal">Cancelar</button><button class="btn" type="submit">Guardar producto</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="food-modal" id="food-summary-modal" aria-hidden="true">
+      <div class="food-modal-card" role="dialog" aria-modal="true" aria-labelledby="food-summary-modal-title">
+        <div class="food-modal-title" id="food-summary-modal-title">Resumen del pedido</div>
+        <div id="food-summary-content"></div>
+        <div class="food-modal-actions"><button class="btn btn-secondary" type="button" data-food-close="food-summary-modal">Cancelar</button><button class="btn" id="food-create-order-btn" type="button">Preparar emails</button></div>
+      </div>
+    </div>
+
+    <div class="food-modal" id="food-emails-modal" aria-hidden="true">
+      <div class="food-modal-card wide" role="dialog" aria-modal="true" aria-labelledby="food-emails-modal-title">
+        <div class="food-order-summary-header"><div class="food-modal-title" id="food-emails-modal-title">Emails del pedido</div><div class="food-email-counter" id="food-email-counter">0/0 enviados</div></div>
+        <div id="food-emails-content"></div>
+        <div class="food-modal-actions"><button class="btn btn-secondary" type="button" data-food-close="food-emails-modal">Cerrar</button></div>
       </div>
     </div>
   

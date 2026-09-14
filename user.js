@@ -33,6 +33,26 @@ const databaseSubtitle = document.getElementById('database-subtitle');
 const databaseRefreshBtn = document.getElementById('database-refresh-btn');
 const databaseClearTestBtn = document.getElementById('database-clear-test-btn');
 const databaseRowDetail = document.getElementById('database-row-detail');
+const foodOrderView = document.getElementById('food-order-view');
+const foodProductSearch = document.getElementById('food-product-search');
+const foodRefreshBtn = document.getElementById('food-refresh-btn');
+const foodCategoryList = document.getElementById('food-category-list');
+const foodProductsGrid = document.getElementById('food-products-grid');
+const foodOrderAddBtn = document.getElementById('food-order-add-btn');
+const foodAddProductBtn = document.getElementById('food-add-product-btn');
+const foodAddSupplierBtn = document.getElementById('food-add-supplier-btn');
+const foodSupplierModal = document.getElementById('food-supplier-modal');
+const foodProductModal = document.getElementById('food-product-modal');
+const foodSummaryModal = document.getElementById('food-summary-modal');
+const foodEmailsModal = document.getElementById('food-emails-modal');
+const foodSupplierForm = document.getElementById('food-supplier-form');
+const foodProductForm = document.getElementById('food-product-form');
+const foodProductSupplier = document.getElementById('food-product-supplier');
+const foodProductCategoryChecks = document.getElementById('food-product-category-checks');
+const foodSummaryContent = document.getElementById('food-summary-content');
+const foodCreateOrderBtn = document.getElementById('food-create-order-btn');
+const foodEmailsContent = document.getElementById('food-emails-content');
+const foodEmailCounter = document.getElementById('food-email-counter');
 
 const queueList = document.getElementById('upload-queue-list');
 const queueTimeEstimateEl = document.getElementById('queue-time-estimate');
@@ -1788,6 +1808,445 @@ function setDatabasePanelVisible(isVisible) {
   }
 }
 
+const foodOrderState = {
+  categories: [],
+  suppliers: [],
+  products: [],
+  selectedCategoryId: null,
+  quantities: new Map(),
+  selectedProducts: new Map(),
+  currentOrder: null,
+  searchTimer: null
+};
+
+function setFoodOrderPanelVisible(isVisible) {
+  if (foodOrderView) foodOrderView.classList.toggle('active', Boolean(isVisible));
+  if (isVisible) setDatabasePanelVisible(false);
+  ['folder-summary', 'files-list', 'upload-queue-panel'].forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) element.style.display = isVisible ? 'none' : '';
+  });
+}
+
+function openFoodModal(modal) {
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeFoodModal(modal) {
+  if (!modal) return;
+  modal.classList.remove('active');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function renderFoodCategories() {
+  if (!foodCategoryList) return;
+  foodCategoryList.innerHTML = '';
+  const allButton = document.createElement('button');
+  allButton.type = 'button';
+  allButton.className = 'food-category-btn';
+  allButton.classList.toggle('active', !foodOrderState.selectedCategoryId);
+  allButton.textContent = 'Todos';
+  allButton.addEventListener('click', () => {
+    foodOrderState.selectedCategoryId = null;
+    renderFoodCategories();
+    loadFoodProducts();
+  });
+  foodCategoryList.appendChild(allButton);
+  foodOrderState.categories.forEach((category) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'food-category-btn';
+    button.classList.toggle('active', category.id === foodOrderState.selectedCategoryId);
+    button.textContent = category.name;
+    button.addEventListener('click', () => {
+      foodOrderState.selectedCategoryId = category.id;
+      renderFoodCategories();
+      loadFoodProducts();
+    });
+    foodCategoryList.appendChild(button);
+  });
+}
+
+function getFoodQuantity(productId) {
+  return foodOrderState.quantities.get(productId) || '';
+}
+
+function renderFoodProducts() {
+  if (!foodProductsGrid) return;
+  if (!foodOrderState.products.length) {
+    foodProductsGrid.innerHTML = '<div class="food-empty">No hay productos que coincidan. Usa “Añadir producto” para crear el primero.</div>';
+    return;
+  }
+  foodProductsGrid.innerHTML = '';
+  foodOrderState.products.forEach((product) => {
+    const card = document.createElement('article');
+    card.className = 'food-product-card';
+    const name = document.createElement('div');
+    name.className = 'food-product-name';
+    name.textContent = product.name;
+    const meta = document.createElement('div');
+    meta.className = 'food-product-meta';
+    const categoryText = (product.categories || []).map((category) => category.name).join(' · ');
+    meta.textContent = `Proveedor: ${product.supplierName || 'Sin proveedor'}\nMétrica: ${product.metric}${categoryText ? `\n${categoryText}` : ''}`;
+    meta.style.whiteSpace = 'pre-line';
+    const quantityRow = document.createElement('label');
+    quantityRow.className = 'food-quantity-row';
+    quantityRow.textContent = 'Cantidad:';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '0.001';
+    input.inputMode = 'decimal';
+    input.className = 'food-quantity-input';
+    input.value = getFoodQuantity(product.id);
+    input.setAttribute('aria-label', `Cantidad de ${product.name}`);
+    input.addEventListener('input', () => {
+      const rawValue = input.value.trim();
+      const value = Number(rawValue.replace(',', '.'));
+      if (!rawValue || !Number.isFinite(value) || value <= 0) {
+        foodOrderState.quantities.delete(product.id);
+        foodOrderState.selectedProducts.delete(product.id);
+      } else {
+        foodOrderState.quantities.set(product.id, Math.round(value * 1000) / 1000);
+        foodOrderState.selectedProducts.set(product.id, product);
+      }
+    });
+    const metric = document.createElement('span');
+    metric.textContent = product.metric;
+    quantityRow.append(input, metric);
+    card.append(name, meta, quantityRow);
+    foodProductsGrid.appendChild(card);
+  });
+}
+
+async function loadFoodProducts() {
+  if (!foodProductsGrid) return;
+  foodProductsGrid.innerHTML = '<div class="food-empty">Cargando productos...</div>';
+  try {
+    const payload = await ipcRenderer.invoke('food-products-list', {
+      search: foodProductSearch?.value || '',
+      categoryIds: foodOrderState.selectedCategoryId ? [foodOrderState.selectedCategoryId] : []
+    });
+    foodOrderState.products = payload.products || [];
+    renderFoodProducts();
+  } catch (error) {
+    foodProductsGrid.innerHTML = `<div class="food-empty">${escapeHtml(error.message || 'No se pudieron cargar los productos.')}</div>`;
+    showStatus(`Error cargando productos: ${error.message || error}`, 'error');
+  }
+}
+
+async function loadFoodOrderView() {
+  if (!foodOrderView) return;
+  setFoodOrderPanelVisible(true);
+  try {
+    const [categoriesPayload, suppliersPayload] = await Promise.all([
+      ipcRenderer.invoke('food-categories-list'),
+      ipcRenderer.invoke('food-suppliers-list')
+    ]);
+    foodOrderState.categories = categoriesPayload.categories || [];
+    foodOrderState.suppliers = suppliersPayload.suppliers || [];
+    renderFoodCategories();
+    await loadFoodProducts();
+    breadcrumb = [{ id: null, name: 'Mi unidad' }, { id: '__food_orders__', name: 'Pedir' }];
+    renderBreadcrumbs();
+  } catch (error) {
+    showStatus(`Error cargando pedidos: ${error.message || error}`, 'error');
+  }
+}
+
+function populateFoodProductForm() {
+  if (foodProductSupplier) {
+    foodProductSupplier.innerHTML = '';
+    if (!foodOrderState.suppliers.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Primero añade un proveedor';
+      foodProductSupplier.appendChild(option);
+    } else {
+      foodOrderState.suppliers.forEach((supplier) => {
+        const option = document.createElement('option');
+        option.value = supplier.id;
+        option.textContent = supplier.name || supplier.orderEmail || supplier.email || 'Proveedor sin nombre';
+        foodProductSupplier.appendChild(option);
+      });
+    }
+  }
+  if (foodProductCategoryChecks) {
+    foodProductCategoryChecks.innerHTML = '';
+    foodOrderState.categories.forEach((category) => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = category.id;
+      label.append(checkbox, document.createTextNode(category.name));
+      foodProductCategoryChecks.appendChild(label);
+    });
+  }
+}
+
+function openFoodProductModal() {
+  if (!foodOrderState.suppliers.length) {
+    showStatus('Añade primero un proveedor para poder asociar el producto.', 'error');
+    openFoodSupplierModal();
+    return;
+  }
+  foodProductForm?.reset();
+  populateFoodProductForm();
+  openFoodModal(foodProductModal);
+}
+
+function openFoodSupplierModal() {
+  foodSupplierForm?.reset();
+  openFoodModal(foodSupplierModal);
+}
+
+function getSelectedFoodOrderItems() {
+  return [...foodOrderState.quantities.entries()]
+    .map(([productId, quantity]) => ({ product: foodOrderState.selectedProducts.get(productId), quantity }))
+    .filter(({ product, quantity }) => product && Number(quantity) > 0);
+}
+
+function openFoodSummaryModal() {
+  const selectedItems = getSelectedFoodOrderItems();
+  if (!selectedItems.length) {
+    showStatus('Introduce una cantidad mayor que cero en al menos un producto.', 'error');
+    return;
+  }
+  const groups = new Map();
+  selectedItems.forEach(({ product, quantity }) => {
+    const key = product.supplierId || product.supplierName || 'sin-proveedor';
+    if (!groups.has(key)) groups.set(key, { supplierName: product.supplierName || 'Proveedor sin nombre', items: [] });
+    groups.get(key).items.push({ product, quantity });
+  });
+  foodSummaryContent.innerHTML = '';
+  groups.forEach((group) => {
+    const container = document.createElement('div');
+    container.className = 'food-order-summary-group';
+    const title = document.createElement('h4');
+    title.textContent = group.supplierName;
+    const list = document.createElement('ul');
+    group.items.forEach(({ product, quantity }) => {
+      const item = document.createElement('li');
+      item.textContent = `${product.name}: ${quantity} ${product.metric}`;
+      list.appendChild(item);
+    });
+    container.append(title, list);
+    foodSummaryContent.appendChild(container);
+  });
+  openFoodModal(foodSummaryModal);
+}
+
+function renderFoodOrderEmails() {
+  const currentOrder = foodOrderState.currentOrder;
+  if (!currentOrder || !foodEmailsContent) return;
+  const emails = currentOrder.emails || [];
+  if (foodEmailCounter) foodEmailCounter.textContent = `${currentOrder.sentEmails || 0}/${currentOrder.totalEmails || emails.length} enviados`;
+  foodEmailsContent.innerHTML = '';
+  emails.forEach((email) => {
+    const card = document.createElement('article');
+    card.className = `food-email-card ${email.status === 'sent' ? 'sent' : ''} ${email.status === 'error' ? 'error' : ''}`;
+    const header = document.createElement('div');
+    header.className = 'food-email-header';
+    const supplier = document.createElement('div');
+    supplier.className = 'food-email-supplier';
+    supplier.textContent = email.supplierName || email.toEmail;
+    const status = document.createElement('span');
+    status.className = 'food-email-status';
+    status.textContent = email.status === 'sent' ? 'Enviado ✓' : (email.status === 'error' ? 'Error de envío' : 'Borrador');
+    header.append(supplier, status);
+    const to = document.createElement('div');
+    to.className = 'food-product-meta';
+    to.textContent = `Para: ${email.toEmail}\nAsunto: ${email.subject}`;
+    to.style.whiteSpace = 'pre-line';
+    const preview = document.createElement('div');
+    preview.className = 'food-email-preview';
+    preview.textContent = email.bodyText;
+    card.append(header, to, preview);
+    if (email.errorMessage) {
+      const error = document.createElement('div');
+      error.className = 'food-email-error';
+      error.textContent = email.errorMessage;
+      card.appendChild(error);
+    }
+    if (email.status !== 'sent') {
+      const actions = document.createElement('div');
+      actions.className = 'food-modal-actions';
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'btn btn-secondary small';
+      editButton.textContent = 'Editar';
+      editButton.addEventListener('click', () => editFoodOrderEmail(email, card));
+      const sendButton = document.createElement('button');
+      sendButton.type = 'button';
+      sendButton.className = 'btn small';
+      sendButton.textContent = email.status === 'error' ? 'Reintentar envío' : 'Enviar';
+      sendButton.addEventListener('click', () => sendFoodOrderEmail(email, sendButton));
+      actions.append(editButton, sendButton);
+      card.appendChild(actions);
+    }
+    foodEmailsContent.appendChild(card);
+  });
+}
+
+async function refreshFoodOrderStatus() {
+  const orderId = foodOrderState.currentOrder?.order?.id;
+  if (!orderId) return;
+  const payload = await ipcRenderer.invoke('food-order-status', { orderId });
+  foodOrderState.currentOrder = payload;
+  renderFoodOrderEmails();
+}
+
+async function createFoodOrderDrafts() {
+  const selectedItems = getSelectedFoodOrderItems();
+  if (!selectedItems.length) return;
+  try {
+    foodCreateOrderBtn.disabled = true;
+    foodCreateOrderBtn.textContent = 'Preparando...';
+    const payload = await ipcRenderer.invoke('food-order-create', {
+      items: selectedItems.map(({ product, quantity }) => ({ productId: product.id, quantity }))
+    });
+    foodOrderState.currentOrder = payload;
+    closeFoodModal(foodSummaryModal);
+    foodOrderState.quantities.clear();
+    foodOrderState.selectedProducts.clear();
+    renderFoodProducts();
+    renderFoodOrderEmails();
+    openFoodModal(foodEmailsModal);
+    showStatus('Borradores de email preparados para revisar.', 'success');
+  } catch (error) {
+    showStatus(`No se pudieron preparar los emails: ${error.message || error}`, 'error');
+  } finally {
+    foodCreateOrderBtn.disabled = false;
+    foodCreateOrderBtn.textContent = 'Preparar emails';
+  }
+}
+
+async function editFoodOrderEmail(email, card) {
+  const existing = card.querySelector('.food-email-edit-form');
+  if (existing) return;
+  const form = document.createElement('form');
+  form.className = 'food-email-edit-form';
+  form.innerHTML = `
+    <div class="food-form-grid" style="margin-top:12px;">
+      <label class="food-form-field full">Para<input name="toEmail" type="email" required maxlength="320" value="${escapeHtml(email.toEmail)}" /></label>
+      <label class="food-form-field full">Asunto<input name="subject" required maxlength="500" value="${escapeHtml(email.subject)}" /></label>
+      <label class="food-form-field full">Cuerpo<textarea name="bodyText" required maxlength="20000"></textarea></label>
+    </div>
+    <div class="food-modal-actions"><button class="btn btn-secondary small" type="button">Cancelar edición</button><button class="btn small" type="submit">Guardar cambios</button></div>`;
+  form.elements.bodyText.value = email.bodyText;
+  form.querySelector('button[type="button"]').addEventListener('click', () => form.remove());
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submitButton = form.querySelector('button[type="submit"]');
+    try {
+      submitButton.disabled = true;
+      await ipcRenderer.invoke('food-order-email-update', {
+        emailId: email.id,
+        toEmail: form.elements.toEmail.value,
+        subject: form.elements.subject.value,
+        bodyText: form.elements.bodyText.value
+      });
+      await refreshFoodOrderStatus();
+      showStatus('Borrador actualizado.', 'success');
+    } catch (error) {
+      showStatus(`No se pudo actualizar el borrador: ${error.message || error}`, 'error');
+      submitButton.disabled = false;
+    }
+  });
+  card.appendChild(form);
+}
+
+async function sendFoodOrderEmail(email, button) {
+  if (!confirm(`¿Enviar ahora el pedido a ${email.toEmail}?`)) return;
+  try {
+    button.disabled = true;
+    button.textContent = 'Enviando...';
+    const payload = await ipcRenderer.invoke('food-order-email-send', { emailId: email.id });
+    foodOrderState.currentOrder = payload;
+    renderFoodOrderEmails();
+    showStatus(`Email enviado a ${email.toEmail}.`, 'success');
+  } catch (error) {
+    await refreshFoodOrderStatus().catch(() => {});
+    showStatus(`No se pudo enviar el email: ${error.message || error}`, 'error');
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = 'Enviar';
+    }
+  }
+}
+
+if (foodRefreshBtn) foodRefreshBtn.addEventListener('click', loadFoodOrderView);
+if (foodProductSearch) {
+  foodProductSearch.addEventListener('input', () => {
+    clearTimeout(foodOrderState.searchTimer);
+    foodOrderState.searchTimer = setTimeout(loadFoodProducts, 250);
+  });
+}
+if (foodAddProductBtn) foodAddProductBtn.addEventListener('click', openFoodProductModal);
+if (foodAddSupplierBtn) foodAddSupplierBtn.addEventListener('click', openFoodSupplierModal);
+if (foodOrderAddBtn) foodOrderAddBtn.addEventListener('click', openFoodSummaryModal);
+if (foodCreateOrderBtn) foodCreateOrderBtn.addEventListener('click', createFoodOrderDrafts);
+
+if (foodSupplierForm) {
+  foodSupplierForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const supplier = await ipcRenderer.invoke('food-supplier-create', {
+        name: document.getElementById('food-supplier-name').value,
+        email: document.getElementById('food-supplier-email').value,
+        orderEmail: document.getElementById('food-supplier-order-email').value,
+        contactName: document.getElementById('food-supplier-contact-name').value,
+        phone: document.getElementById('food-supplier-phone').value,
+        cif: document.getElementById('food-supplier-cif').value,
+        address: document.getElementById('food-supplier-address').value
+      });
+      const index = foodOrderState.suppliers.findIndex((item) => item.id === supplier.supplier.id);
+      if (index >= 0) foodOrderState.suppliers[index] = supplier.supplier;
+      else foodOrderState.suppliers.push(supplier.supplier);
+      foodOrderState.suppliers.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+      closeFoodModal(foodSupplierModal);
+      showStatus('Proveedor guardado.', 'success');
+      if (foodProductModal?.classList.contains('active')) populateFoodProductForm();
+    } catch (error) {
+      showStatus(`No se pudo guardar el proveedor: ${error.message || error}`, 'error');
+    }
+  });
+}
+
+if (foodProductForm) {
+  foodProductForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const categoryIds = [...foodProductCategoryChecks.querySelectorAll('input:checked')].map((input) => input.value);
+      await ipcRenderer.invoke('food-product-create', {
+        name: document.getElementById('food-product-name').value,
+        metric: document.getElementById('food-product-metric').value,
+        supplierId: foodProductSupplier.value,
+        supplierEmailOverride: document.getElementById('food-product-email-override').value,
+        categoryIds,
+        notes: document.getElementById('food-product-notes').value
+      });
+      closeFoodModal(foodProductModal);
+      await loadFoodProducts();
+      showStatus('Producto guardado.', 'success');
+    } catch (error) {
+      showStatus(`No se pudo guardar el producto: ${error.message || error}`, 'error');
+    }
+  });
+}
+
+document.querySelectorAll('[data-food-close]').forEach((button) => {
+  button.addEventListener('click', () => closeFoodModal(document.getElementById(button.dataset.foodClose)));
+});
+[foodSupplierModal, foodProductModal, foodSummaryModal, foodEmailsModal].forEach((modal) => {
+  modal?.addEventListener('click', (event) => {
+    if (event.target === modal) closeFoodModal(modal);
+  });
+});
+
 function renderDatabaseTableButtons() {
   if (!databaseTableList) return;
   databaseTableList.innerHTML = '';
@@ -3147,6 +3606,7 @@ async function loadFolderContents(folderId = null, pushToBreadcrumb = true, fold
     folderName
   });
   setDatabasePanelVisible(false);
+  setFoodOrderPanelVisible(false);
   try {
     const res = await ipcRenderer.invoke('list-contents', folderId);
     const files = res.files || [];
@@ -3303,6 +3763,10 @@ function renderBreadcrumbs() {
         loadDatabaseView(databaseViewerState.selectedTable?.name || null);
         return;
       }
+      if (b.id === '__food_orders__') {
+        loadFoodOrderView();
+        return;
+      }
       // go to this breadcrumb
       breadcrumb = breadcrumb.slice(0, idx + 1);
       loadFolderContents(b.id, false, b.name);
@@ -3323,6 +3787,10 @@ function renderBreadcrumbs() {
       s.addEventListener('click', () => {
         if (b.id === '__database__') {
           loadDatabaseView(databaseViewerState.selectedTable?.name || null);
+          return;
+        }
+        if (b.id === '__food_orders__') {
+          loadFoodOrderView();
           return;
         }
         breadcrumb = breadcrumb.slice(0, idx + 1);
@@ -3400,6 +3868,10 @@ tileButtons.forEach(tile => {
     }
     if (action === 'bases-datos') {
       await loadDatabaseView(databaseViewerState.selectedTable?.name || null);
+      return;
+    }
+    if (action === 'pedir') {
+      await loadFoodOrderView();
       return;
     }
 

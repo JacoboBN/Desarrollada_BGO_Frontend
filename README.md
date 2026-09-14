@@ -14,6 +14,7 @@ Aplicación de escritorio Electron para gestionar facturas y albaranes con Googl
 - Botón temporal de pruebas para vaciar los datos operativos de PostgreSQL con confirmación explícita, sin borrar tablas ni migraciones.
 - Envío de emails de resultado mediante Gmail autenticado. Solo se notifica la comparación cuando una factura tiene todos sus albaranes relacionados: verde si no hay diferencias, amarillo si solo hay diferencias de 1 céntimo y rojo si existe alguna diferencia de 2 céntimos o más. La calidad documental clasifica campos como `mortal`, `critico`, `medio` o `indiferente`: el aviso `🚨` se reserva para número, total o referencias imprescindibles ausentes, o `confidence < 0.60`; los avisos no mortales no generan emails automáticos.
 - Actualización automática con `electron-updater` y releases de GitHub.
+- Módulo **PEDIR**: catálogo de productos de alimentación por categorías, cantidades según métrica, proveedores con contacto de pedidos, resumen y borradores de emails agrupados por proveedor antes de su envío individual por Gmail.
 
 ## Requisitos
 
@@ -131,6 +132,12 @@ El flujo de negocio crea/usa carpetas como:
 - Subcarpetas de informes y documentos procesados/no comparados.
 
 El frontend intenta crear carpetas necesarias cuando faltan, según el flujo de subida y comparación.
+
+## Pedidos de alimentación
+
+La tarjeta **PEDIR** abre un catálogo con filtros de categoría y un campo de cantidad por producto. Los productos tienen proveedor y métrica (por ejemplo, `Kg`, `Litro` o `Unidad`). Desde la misma pantalla se pueden crear proveedores y productos.
+
+Al preparar un pedido, Electron solicita al backend la creación de borradores internos, uno por proveedor y email de pedido. La pantalla de revisión muestra el contador `enviados/total`; cada borrador permite modificar destinatario, asunto y cuerpo. Pulsar **Enviar** en un borrador lo manda directamente con la cuenta Gmail de la sesión. Si el proveedor tiene nombre de contacto, el cuerpo inicial usa `Hola <nombre>,`.
 
 ## Funcionalidades futuras o reactivables
 
