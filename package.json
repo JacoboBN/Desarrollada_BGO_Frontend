@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.driveshare.app",
-    "productName": "DriveShare_Desarrollado",
+    "productName": "DriveShare",
     "directories": {
       "output": "dist"
     },

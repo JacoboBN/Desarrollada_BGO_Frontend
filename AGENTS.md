@@ -4,7 +4,7 @@ Estas instrucciones aplican a `Frontend/` y complementan las instrucciones de `.
 
 ## Contexto
 
-- Aplicación de escritorio Electron para DriveShare / BGO.
+- Aplicación de escritorio Electron para DriveShare.
 - Archivo principal: `main.js`.
 - Funcionalidad principal:
   - Login con Google mediante el backend.

@@ -1,4 +1,4 @@
-# Frontend - DriveShare / BGO
+# Frontend - DriveShare
 
 Aplicación de escritorio Electron para gestionar facturas y albaranes con Google Drive, backend Express y análisis con IA.
 
@@ -50,7 +50,7 @@ Variables usadas:
 
 | Variable | Uso |
 | --- | --- |
-| `BACKEND_URL` | URL base del backend. Si falta, usa `https://desarrollada-bgo-backend.onrender.com`. |
+| `BACKEND_URL` | URL base del backend. Si falta, usa la URL de producción configurada en `main.js`. |
 | `ENABLE_REFRESH_TOKENS` | Fuerza uso de refresh tokens propios. Si falta, se activa en producción/app empaquetada. |
 | `RESET_SESSION_ON_START` | Si vale `true`, borra sesiones guardadas al iniciar. |
 | `ENABLE_STARTUP_NO_PROCESADO_SCAN` | Si vale `true`, escanea automáticamente las carpetas `No procesado` al iniciar con una sesión válida o después de un login principal. Por defecto está desactivado. |
@@ -114,7 +114,7 @@ https://github.com/JacoboBN/frontend_factura_albaran
 El repositorio fuente remoto de este checkout puede ser distinto:
 
 ```text
-https://github.com/JacoboBN/Desarrollada_BGO_Fontend
+Repositorio de actualizaciones configurado en `package.json`.
 ```
 
 Si el workflow se ejecuta desde un repo y publica en otro, `GITHUB_TOKEN` puede no ser suficiente. En ese caso se necesita un token con permisos sobre el repositorio de publicación.

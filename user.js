@@ -684,7 +684,7 @@ function classifyBackendError(input = '') {
   if (hasBackendConnectivityIssue) {
     return {
       title: 'No se pudo contactar con el backend',
-      help: 'Parece una caída o problema temporal del backend.\n\nQué hacer:\n1) Espera 1-2 minutos y vuelve a intentar.\n2) Si persiste, avisa a bgoptimizing@gmail.com con una captura del error.'
+      help: 'Parece una caída o problema temporal del backend.\n\nQué hacer:\n1) Espera 1-2 minutos y vuelve a intentar.\n2) Si persiste, avisa al equipo de soporte de DriveShare con una captura del error.'
     };
   }
 
@@ -700,7 +700,7 @@ function classifyBackendError(input = '') {
   if (hasPermissionIssue) {
     return {
       title: 'No tienes permisos suficientes',
-      help: 'Tu usuario no tiene permisos para esta acción.\n\nQué hacer:\n1) Verifica que hayas iniciado sesión con la cuenta correcta.\n2) Pide al administrador que comparta la carpeta/función necesaria en Google Drive.\n3) Si debe funcionar y no funciona, escribe a bgoptimizing@gmail.com.'
+      help: 'Tu usuario no tiene permisos para esta acción.\n\nQué hacer:\n1) Verifica que hayas iniciado sesión con la cuenta correcta.\n2) Pide al administrador que comparta la carpeta o función necesaria en Google Drive.\n3) Si debe funcionar y no funciona, escribe al equipo de soporte de DriveShare.'
     };
   }
 
@@ -716,7 +716,7 @@ function classifyBackendError(input = '') {
   if (hasSessionIssue) {
     return {
       title: 'Tu sesión ha caducado',
-      help: 'Parece un problema de autenticación.\n\nQué hacer:\n1) Cierra sesión y vuelve a iniciar sesión con Google.\n2) Repite la acción.\n3) Si sigue pasando, avisa a bgoptimizing@gmail.com.'
+      help: 'Parece un problema de autenticación.\n\nQué hacer:\n1) Cierra sesión y vuelve a iniciar sesión con Google.\n2) Repite la acción.\n3) Si sigue pasando, avisa al equipo de soporte de DriveShare.'
     };
   }
 
