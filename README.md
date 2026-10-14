@@ -205,7 +205,7 @@ La aplicación usa, entre otras:
 - electron-store
 - electron-log
 
-Además, `main.js` usa `require('form-data')`, pero `form-data` no está declarado como dependencia directa en `package.json` en este checkout. Conviene añadirlo explícitamente para no depender de una dependencia transitiva de `electron-builder`.
+`main.js` usa `require('form-data')` para las subidas multipart. La librería está declarada como dependencia directa en `package.json` y bloqueada en `package-lock.json`.
 
 Revisar periódicamente:
 
