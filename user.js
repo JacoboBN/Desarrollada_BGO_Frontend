@@ -31,8 +31,8 @@ const databaseTableContent = document.getElementById('database-table-content');
 const databaseTableMeta = document.getElementById('database-table-meta');
 const databaseSubtitle = document.getElementById('database-subtitle');
 const databaseRefreshBtn = document.getElementById('database-refresh-btn');
-const databaseClearTestBtn = document.getElementById('database-clear-test-btn');
 const databaseRowDetail = document.getElementById('database-row-detail');
+const openUserManualBtn = document.getElementById('open-user-manual-btn');
 const foodOrderView = document.getElementById('food-order-view');
 const foodProductSearch = document.getElementById('food-product-search');
 const foodRefreshBtn = document.getElementById('food-refresh-btn');
@@ -1721,6 +1721,28 @@ function compactDatabaseValue(value, maxLength = 120) {
   return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }
 
+function formatDatabaseValue(columnName, value) {
+  if (value === null || value === undefined || value === '') return '—';
+
+  if (['total', 'total_albaran'].includes(columnName)) {
+    const numeric = parseComparableNumber(value);
+    return numeric === null ? '—' : formatAmountEuro(numeric);
+  }
+
+  if (['fecha', 'fecha_albaran', 'actualizado', 'creado', 'enviado', 'iniciado', 'finalizado'].includes(columnName)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      const includeTime = ['actualizado', 'creado', 'enviado', 'iniciado', 'finalizado'].includes(columnName);
+      return new Intl.DateTimeFormat('es-ES', includeTime
+        ? { dateStyle: 'short', timeStyle: 'short' }
+        : { dateStyle: 'short' }
+      ).format(date);
+    }
+  }
+
+  return stringifyDatabaseValue(value);
+}
+
 async function moveDatabaseComparisonDocuments(comparison = {}, folders = {}) {
   const result = comparison.result || {};
   if (result.pending || result.needsReview) return;
@@ -2251,26 +2273,40 @@ function renderDatabaseTableButtons() {
   if (!databaseTableList) return;
   databaseTableList.innerHTML = '';
 
+  const tablesBySection = new Map();
   databaseViewerState.tables.forEach((table) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'database-table-btn';
-    button.classList.toggle('active', table.name === databaseViewerState.selectedTable?.name);
-    button.textContent = table.label || table.name;
-    button.title = table.description || table.name;
-    button.addEventListener('click', () => loadDatabaseView(table.name));
-    databaseTableList.appendChild(button);
+    const section = table.section || 'Datos';
+    if (!tablesBySection.has(section)) tablesBySection.set(section, []);
+    tablesBySection.get(section).push(table);
+  });
+
+  tablesBySection.forEach((tables, section) => {
+    const sectionTitle = document.createElement('div');
+    sectionTitle.className = 'database-section-title';
+    sectionTitle.textContent = section;
+    databaseTableList.appendChild(sectionTitle);
+
+    tables.forEach((table) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'database-table-btn';
+      button.classList.toggle('active', table.name === databaseViewerState.selectedTable?.name);
+      button.textContent = table.label || table.name;
+      button.title = table.description || table.name;
+      button.addEventListener('click', () => loadDatabaseView(table.name));
+      databaseTableList.appendChild(button);
+    });
   });
 }
 
 function renderDatabaseDetail(row, rowIndex) {
   if (!databaseRowDetail || !databaseViewerState.selectedTable) return;
 
-  const title = `${databaseViewerState.selectedTable.label || databaseViewerState.selectedTable.name} · fila ${rowIndex + 1}`;
+  const title = `${databaseViewerState.selectedTable.label || databaseViewerState.selectedTable.name} · registro ${rowIndex + 1}`;
   const rowsHtml = databaseViewerState.columns.map((column) => `
     <tr>
-      <th>${escapeHtml(column.name)}</th>
-      <td><div class="database-detail-value">${escapeHtml(stringifyDatabaseValue(row[column.name]))}</div></td>
+      <th>${escapeHtml(column.label || column.name)}</th>
+      <td><div class="database-detail-value">${escapeHtml(formatDatabaseValue(column.name, row[column.name]))}</div></td>
     </tr>
   `).join('');
 
@@ -2302,10 +2338,10 @@ function renderDatabaseTable() {
   }
 
   if (databaseSubtitle) {
-    databaseSubtitle.textContent = `${table.description || ''} Doble click en una fila para ver todos sus campos ordenados.`;
+    databaseSubtitle.textContent = `${table.description || ''} Selecciona una fila para consultar su detalle.`;
   }
   if (databaseTableMeta) {
-    databaseTableMeta.textContent = `${table.label || table.name}: ${databaseViewerState.rows.length} de ${databaseViewerState.totalRows} filas mostradas (límite ${databaseViewerState.limit}).`;
+    databaseTableMeta.textContent = `${table.label || table.name}: se muestran ${databaseViewerState.rows.length} de ${databaseViewerState.totalRows} registros.`;
   }
   if (!databaseViewerState.rows.length) {
     databaseTableContent.innerHTML = '<div class="database-empty">No hay filas guardadas en esta tabla para tu organización.</div>';
@@ -2313,14 +2349,14 @@ function renderDatabaseTable() {
   }
 
   const headersHtml = databaseViewerState.columns
-    .map((column) => `<th title="${escapeHtml(column.type || '')}">${escapeHtml(column.name)}</th>`)
+    .map((column) => `<th>${escapeHtml(column.label || column.name)}</th>`)
     .join('');
   const bodyHtml = databaseViewerState.rows.map((row, rowIndex) => {
     const cells = databaseViewerState.columns.map((column) => {
-      const fullValue = stringifyDatabaseValue(row[column.name]);
-      return `<td title="${escapeHtml(fullValue)}">${escapeHtml(compactDatabaseValue(row[column.name]))}</td>`;
+      const fullValue = formatDatabaseValue(column.name, row[column.name]);
+      return `<td title="${escapeHtml(fullValue)}">${escapeHtml(compactDatabaseValue(fullValue))}</td>`;
     }).join('');
-    return `<tr data-row-index="${rowIndex}" title="Doble click para ver el detalle completo">${cells}</tr>`;
+    return `<tr data-row-index="${rowIndex}" title="Selecciona para ver el detalle">${cells}</tr>`;
   }).join('');
 
   databaseTableContent.innerHTML = `
@@ -2331,7 +2367,7 @@ function renderDatabaseTable() {
   `;
 
   databaseTableContent.querySelectorAll('tbody tr').forEach((rowElement) => {
-    rowElement.addEventListener('dblclick', () => {
+    rowElement.addEventListener('click', () => {
       const rowIndex = Number(rowElement.dataset.rowIndex);
       const row = databaseViewerState.rows[rowIndex];
       if (row) renderDatabaseDetail(row, rowIndex);
@@ -2380,21 +2416,16 @@ if (databaseRefreshBtn) {
   });
 }
 
-if (databaseClearTestBtn) {
-  databaseClearTestBtn.addEventListener('click', async () => {
-    const confirmation = 'Desea borrar el conenido de las bases de datos?';
-    if (!confirm(confirmation)) return;
-
+if (openUserManualBtn) {
+  openUserManualBtn.addEventListener('click', async () => {
     try {
-      databaseClearTestBtn.disabled = true;
-      showStatus('Vaciando base de datos. La aplicación se cerrará...', 'loading');
-      await ipcRenderer.invoke('clear-database-test-data', confirmation);
+      await ipcRenderer.invoke('open-user-manual');
     } catch (error) {
-      showStatus(`Error vaciando base de datos: ${error.message || error}`, 'error');
-      databaseClearTestBtn.disabled = false;
+      showStatus(`No se pudo abrir el manual de usuario: ${error.message || error}`, 'error');
     }
   });
 }
+
 
 function formatIncongruentAlbaranLineHtml(line = '') {
   const cleaned = String(line || '').replace(/^\-\s*/, '').trim();

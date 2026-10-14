@@ -11,7 +11,7 @@ Aplicación de escritorio Electron para gestionar facturas y albaranes con Googl
 - Polling de jobs y cancelación de elementos en cola.
 - Persistencia de las extracciones de IA en PostgreSQL y comparación de facturas contra albaranes por totales desde la base de datos.
 - Comparación automática de documentos relacionados, independientemente del orden de subida; Drive solo representa su estado visual (`No procesado`, `No comparado`, `Documentos`).
-- Botón temporal de pruebas para vaciar los datos operativos de PostgreSQL con confirmación explícita, sin borrar tablas ni migraciones.
+- Vista **Datos** en modo solo lectura para consultar facturas, albaranes, proveedores, pedidos y actividad reciente sin exponer identificadores ni campos técnicos.
 - Envío de emails de resultado mediante Gmail autenticado. Solo se notifica la comparación cuando una factura tiene todos sus albaranes relacionados: verde si no hay diferencias, amarillo si solo hay diferencias de 1 céntimo y rojo si existe alguna diferencia de 2 céntimos o más. La calidad documental clasifica campos como `mortal`, `critico`, `medio` o `indiferente`: el aviso `🚨` se reserva para número, total o referencias imprescindibles ausentes, o `confidence < 0.60`; los avisos no mortales no generan emails automáticos.
 - Actualización automática con `electron-updater` y releases de GitHub.
 - Módulo **PEDIR**: catálogo de productos de alimentación por categorías, cantidades según métrica, proveedores con contacto de pedidos, resumen y borradores de emails agrupados por proveedor antes de su envío individual por Gmail.
@@ -38,12 +38,18 @@ npm install
 
 ## Variables de entorno
 
-El código lee variables desde `process.env`. El archivo `.env` no se carga automáticamente por Electron salvo que se añada un cargador explícito; para desarrollo se recomienda usar scripts npm o variables del sistema.
+El código lee variables desde `process.env`. El archivo `.env` no se carga automáticamente por Electron salvo que se añada un cargador explícito; por ello `.env.example` sirve como referencia de configuración, no como cargador de variables. Para desarrollo se recomienda usar scripts npm o variables del sistema.
 
-Copia el ejemplo si quieres documentar valores locales:
+Copia el ejemplo si quieres documentar valores locales; copiarlo no altera el comportamiento de Electron mientras no se añada un cargador explícito:
 
 ```bash
 copy .env.example .env
+```
+
+Por ejemplo, para definir una URL personalizada en la terminal actual de PowerShell:
+
+```powershell
+$env:BACKEND_URL = 'http://localhost:3000'; npm run start:prod
 ```
 
 Variables usadas:
@@ -51,6 +57,7 @@ Variables usadas:
 | Variable | Uso |
 | --- | --- |
 | `BACKEND_URL` | URL base del backend. Si falta, usa la URL de producción configurada en `main.js`. |
+| `NODE_ENV` | Si vale `production`, activa por defecto el uso de refresh tokens propios. |
 | `ENABLE_REFRESH_TOKENS` | Fuerza uso de refresh tokens propios. Si falta, se activa en producción/app empaquetada. |
 | `RESET_SESSION_ON_START` | Si vale `true`, borra sesiones guardadas al iniciar. |
 | `ENABLE_STARTUP_NO_PROCESADO_SCAN` | Si vale `true`, escanea automáticamente las carpetas `No procesado` al iniciar con una sesión válida o después de un login principal. Por defecto está desactivado. |
@@ -95,11 +102,14 @@ La configuración `build.extraResources` de `package.json` espera:
 assets/icon.ico
 assets/icon.icns
 assets/icon.png
+assets/manuals/Manual de usuario DriveShare.pdf
 assets/bin/win/
 ocr/ocr.exe
 ```
 
 En un clon limpio estos recursos pueden no existir. El workflow de release también necesita tenerlos disponibles antes de ejecutar `npm run build:win`.
+
+El manual de usuario se distribuye como recurso adicional de Electron en `resources/manuals/` y se abre desde el botón **Manual de usuario** de la aplicación.
 
 Consulta `assets/bin/README.md` para detalles de los binarios.
 
@@ -147,7 +157,8 @@ Estas funcionalidades se conservan, pero no forman parte del flujo activo por de
 - **Escaneo automático de Drive `No procesado`:** se controla con `ENABLE_STARTUP_NO_PROCESADO_SCAN=true`. Revisa las carpetas de `No procesado`, procesa documentos y relanza comparaciones pendientes; por defecto permanece desactivado.
 - **OCR local de Electron:** conserva el handler `ocr-document`, `performLocalOCR`, `getBinaryPaths` y el recurso `ocr/ocr.exe` configurado para el empaquetado Windows.
 - **Comparación compleja por líneas:** la lógica permanece en `compareFacturaWithAlbaranes` y sus helpers. El flujo activo compara por totales; reactivarla requiere incorporar una selección de modo y revisar los emails de comparación.
-- **Centros:** la tarjeta permanece visible pero deshabilitada hasta que se defina e implemente su flujo de negocio.
+- **Centros:** el flujo no se muestra en la interfaz de entrega porque todavía no está definido ni probado.
+- **Limpieza de datos de prueba:** el endpoint técnico existe para soporte, pero queda bloqueado por defecto y requiere `DRIVESHARE_ENABLE_DANGEROUS_TOOLS=true` en el backend. No forma parte de la interfaz de usuario.
 - **Comparación forzada manual desde UI:** la comparación programática de facturas pendientes se conserva, pero no hay botón manual en la interfaz.
 
 No documentar estas funciones como activas sin reactivarlas y probarlas.

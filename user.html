@@ -374,6 +374,26 @@
       gap: 16px;
     }
 
+    .dashboard-intro {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, #ffffff, #eef6ff);
+      border: 1px solid #d8e8fb;
+      border-radius: 14px;
+      padding: 18px;
+      color: #243447;
+      line-height: 1.5;
+    }
+
+    .dashboard-intro h2 {
+      margin-bottom: 6px;
+      font-size: 22px;
+    }
+
+    .dashboard-intro p {
+      color: #53606f;
+      font-size: 14px;
+    }
+
     .tile {
       background: #ffffff;
       border: 1px solid #d1d1d1;
@@ -387,6 +407,23 @@
 
     .tile:hover {
       background: #f0f0f0;
+    }
+
+    .tile-title,
+    .tile-description {
+      display: block;
+    }
+
+    .tile-title {
+      margin-bottom: 6px;
+      font-size: 17px;
+    }
+
+    .tile-description {
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
     }
 
     .tile.disabled {
@@ -991,6 +1028,19 @@
       overflow: auto;
     }
 
+    .database-section-title {
+      margin: 8px 2px 0;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .database-section-title:first-child {
+      margin-top: 0;
+    }
+
     .database-table-btn {
       border: 1px solid #d7d7d7;
       background: #fff;
@@ -1024,17 +1074,6 @@
       padding: 10px 12px;
       border-bottom: 1px solid #e5e5e5;
       background: #fafafa;
-    }
-
-    .database-disabled-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .database-disabled-actions .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
     }
 
     .database-scroll {
@@ -1292,8 +1331,8 @@
           <div class="app-version" id="app-version">Versión --</div>
 
           <div class="updater-panel" id="updater-panel">
-            <div class="updater-title">Actualizaciones</div>
-            <div class="updater-message" id="updater-message">Comprobación de actualizaciones pendiente.</div>
+            <div class="updater-title">Estado de la aplicación</div>
+            <div class="updater-message" id="updater-message">Comprobando si hay actualizaciones disponibles.</div>
             <progress class="updater-progress hidden" id="updater-progress" value="0" max="100"></progress>
             <div class="updater-actions">
               <button class="btn btn-secondary small" id="updater-check-btn" type="button">Buscar ahora</button>
@@ -1302,11 +1341,9 @@
           </div>
 
              <div class="compare-mode-panel">
-              <div class="compare-mode-title">Manual de instrucciones</div>
+              <div class="compare-mode-title">Manual de usuario</div>
               <div style="margin-top:8px;">
-                <a class="btn btn-secondary small" href="https://docs.google.com/document/d/1QhONo79fJ5_ASWtb8KsH9hHCjR71CeJHBx1QgC44bMc/edit?usp=sharing" target="_blank" rel="noopener">
-                  Abrir manual
-                </a>
+                <button class="btn btn-secondary small" id="open-user-manual-btn" type="button">Abrir manual de usuario</button>
               </div>
             </div>
 
@@ -1326,13 +1363,14 @@
           <div id="search-results" class="search-results"></div>
 
           <section class="dashboard">
-            <button class="tile disabled" data-action="centros" disabled>Centros</button>
-            <button class="tile" data-action="pedir">PEDIR</button>
-            <button class="tile" data-action="bases-datos">Bases de datos</button>
-
-
-            <button class="tile" data-action="facturas">Facturas</button>
-            <button class="tile" data-action="albaranes">Albaranes</button>
+            <div class="dashboard-intro">
+              <h2>Panel principal</h2>
+              <p>Consulta tus documentos, revisa los datos extraídos y prepara pedidos. Puedes subir facturas y albaranes en cualquier orden: DriveShare los analizará y comparará cuando estén relacionados.</p>
+            </div>
+            <button class="tile" data-action="facturas"><span class="tile-title">Facturas</span><span class="tile-description">Consultar y subir facturas</span></button>
+            <button class="tile" data-action="albaranes"><span class="tile-title">Albaranes</span><span class="tile-description">Consultar y subir albaranes</span></button>
+            <button class="tile" data-action="pedir"><span class="tile-title">PEDIR</span><span class="tile-description">Preparar pedidos por proveedor</span></button>
+            <button class="tile" data-action="bases-datos"><span class="tile-title">Datos</span><span class="tile-description">Consultar facturas, albaranes y pedidos guardados</span></button>
           </section>
 
           <section class="content">
@@ -1358,12 +1396,11 @@
             <div id="database-view" class="database-view" aria-live="polite">
               <div class="database-header">
                 <div class="database-title">
-                  <h2>Bases de datos <span class="database-readonly-badge">Lectura / pruebas</span></h2>
-                  <div class="database-subtitle" id="database-subtitle">Consulta lo que se está guardando. El borrado es temporal y solo para pruebas.</div>
+                  <h2>Datos <span class="database-readonly-badge">Solo lectura</span></h2>
+                  <div class="database-subtitle" id="database-subtitle">Consulta la información guardada por DriveShare.</div>
                 </div>
                 <div class="actions">
                   <button class="btn btn-secondary small" id="database-refresh-btn" type="button">Recargar</button>
-                  <button class="btn btn-danger small" id="database-clear-test-btn" type="button">Vaciar BBDD de pruebas (TEMPORAL - luego se borrará)</button>
                 </div>
               </div>
 
@@ -1372,11 +1409,6 @@
                 <div class="database-table-wrap">
                   <div class="database-table-toolbar">
                     <div class="database-table-meta" id="database-table-meta">Selecciona una tabla.</div>
-                    <div class="database-disabled-actions" title="Preparado para una fase futura. Ahora está en solo lectura.">
-                      <button class="btn btn-secondary small" type="button" disabled>Editar fila</button>
-                      <button class="btn small" type="button" disabled>Modificar</button>
-                      <button class="btn btn-danger small" type="button" disabled>Eliminar fila</button>
-                    </div>
                   </div>
                   <div class="database-scroll" id="database-table-content"></div>
                 </div>
@@ -1389,7 +1421,7 @@
             <!-- <div class="startup-status" id="startup-status">Estado de inicio: esperando...</div> -->
             <div class="queue-panel" id="upload-queue-panel">
               <div class="queue-header">
-                <h3>Documentos subidos</h3>
+                <h3>Estado de procesamiento</h3>
                 <div class="queue-bulk-controls hidden" id="queue-bulk-controls">
                   <button class="btn btn-secondary small" id="queue-select-all-btn">Seleccionar todo</button>
                   <button class="btn btn-danger small" id="queue-cancel-selected-btn">Cancelar seleccionados</button>
@@ -1397,7 +1429,7 @@
               </div>
               <div class="queue-estimate" id="queue-time-estimate"></div>
               <div class="queue-list" id="upload-queue-list">
-                <p style="color:#666">Aún no has subido documentos.</p>
+                <p style="color:#666">Los documentos que subas aparecerán aquí con su estado de análisis y comparación.</p>
               </div>
             </div>
           </section>

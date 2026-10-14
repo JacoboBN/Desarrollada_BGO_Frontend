@@ -20,6 +20,12 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "assets/manuals",
+        "to": "manuals"
+      }
+    ],
     "publish": [
       {
         "provider": "github",

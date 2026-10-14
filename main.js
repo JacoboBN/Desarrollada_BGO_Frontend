@@ -2403,6 +2403,18 @@ ipcMain.handle('open-external', async (event, url) => {
   }
 });
 
+ipcMain.handle('open-user-manual', async () => {
+  const manualPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'manuals', 'Manual de usuario DriveShare.pdf')
+    : path.join(__dirname, 'assets', 'manuals', 'Manual de usuario DriveShare.pdf');
+
+  const result = await shell.openPath(manualPath);
+  if (result) {
+    throw new Error(result);
+  }
+  return { success: true };
+});
+
 ipcMain.handle('get-database-view', async (event, tableName = null, limit = 100) => {
   const sessionId = store.get('sessionId');
   if (!sessionId) {
@@ -2526,23 +2538,6 @@ ipcMain.handle('compare-pending-invoices-database', async (event, payload = {}) 
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.error || error.message || 'No se pudieron comparar las facturas pendientes por base de datos');
-  }
-});
-
-ipcMain.handle('clear-database-test-data', async (event, confirmation) => {
-  const sessionId = store.get('sessionId');
-  if (!sessionId) throw new Error('Sesión requerida para vaciar la base de datos');
-
-  try {
-    await postWithRetry(`${BACKEND_URL}/database/clear-test-data`, {
-      sessionId,
-      confirmation
-    }, { timeout: 60000, retries: 0 });
-    store.clear();
-    setTimeout(() => app.quit(), 200);
-    return { success: true };
-  } catch (error) {
-    throw new Error(error.response?.data?.error || error.message || 'No se pudo vaciar la base de datos');
   }
 });
 
