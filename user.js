@@ -1,6 +1,46 @@
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { TERMINAL_STATUSES } = require('./lib/analysisProgress');
+let progressScope = null;
+let progressWriteTail = Promise.resolve();
+
+function saveQueueProgress(queueId, patch) {
+  if (!progressScope) return Promise.resolve();
+  const scope = progressScope;
+  progressWriteTail = progressWriteTail.then(() => ipcRenderer.invoke('analysis-progress-save', scope, queueId, patch));
+  // Conservar el rechazo para detener el lote antes del siguiente documento.
+  progressWriteTail.catch(error => showStatus('No se pudo guardar el progreso de la cola.', 'error', error.message));
+  return progressWriteTail;
+}
+
+async function restoreQueueProgress() {
+  const saved = await ipcRenderer.invoke('analysis-progress-load');
+  if (progressScope === saved.scope) return;
+  progressScope = saved.scope;
+  progressWriteTail = Promise.resolve();
+  uploadQueue.clear();
+  canceledQueueIds.clear();
+  queueFilePathMap.clear();
+  selectedQueueIds.clear();
+  const pending = [];
+  for (const item of saved.items) {
+    uploadQueue.set(item.queueId, {
+      fileName: item.fileName, status: TERMINAL_STATUSES.has(item.status) ? item.status : 'En cola',
+      error: item.error || null, steps: DEFAULT_QUEUE_STEPS
+    });
+    if (!TERMINAL_STATUSES.has(item.status) && item.filePath) pending.push(item);
+  }
+  renderQueue();
+  if (pending.length) {
+    enqueueUploadFlow(async () => {
+      for (const item of pending) {
+        await uploadFilesToFolder('Albaranes', [item]);
+        await progressWriteTail;
+      }
+    }, { label: 'documentos recuperados' }).catch(error => showStatus(error.message, 'error'));
+  }
+}
 const {
   cleanAlbaranDisplayId,
   normalizeAlbaranNumberForMatch: normalizeAlbaranId
@@ -63,7 +103,7 @@ const uploadQueue = new Map();
 const canceledQueueIds = new Set();
 const queueFilePathMap = new Map(); // queueId → Drive file ID del archivo subido (para borrarlo de Drive si se cancela antes de finalizar el pipeline IA)
 const selectedQueueIds = new Set();
-const TERMINAL_QUEUE_STATUSES = new Set(['Error', 'Cancelado', 'Finalizado']);
+const TERMINAL_QUEUE_STATUSES = TERMINAL_STATUSES;
 const ESTIMATED_SECONDS_PER_DOC_MIN = 90;
 const ESTIMATED_SECONDS_PER_DOC_MAX = 120;
 let queueCompletionNotified = false;
@@ -104,9 +144,10 @@ let currentUpdaterStatus = {
   progress: null
 };
 
-const DEFAULT_QUEUE_STEPS = ['En cola', 'Subiendo', 'Analizando', 'Comparando', 'Finalizado'];
+const DEFAULT_QUEUE_STEPS = ['En cola', 'Subiendo', 'Analizando', 'Comparando', 'Completado'];
 let currentUploadTargetFolder = null;
 let uploadFlowTail = Promise.resolve();
+let activeUploadFlows = 0;
 
 function formatDuplicateDate(value) {
   if (!value) return '';
@@ -237,15 +278,16 @@ if (updaterInstallBtn) {
 
 function normalizeQueueStep(step) {
   const rawStep = String(step || '').trim().toLowerCase();
+  if (rawStep === 'finalizado' || rawStep === 'completado') return 'Completado';
   if (['pendiente', 'esperando', 'en cola', 'cola', 'queued', 'queue'].includes(rawStep)) {
     return 'En cola';
   }
   if (rawStep === 'subiendo') return 'Subiendo';
   if (rawStep === 'ocr' || rawStep === 'ia') return 'Analizando';
-  if (rawStep === 'esperando albaranes') return 'Finalizado';
+  if (rawStep === 'esperando albaranes') return 'Completado';
   if (rawStep === 'comparando') return 'Comparando';
-  if (rawStep === 'comparado' || rawStep === 'email') return 'Finalizado';
-  if (rawStep === 'enviando' || rawStep === 'moviendo' || rawStep === 'enviado' || rawStep === 'movido') return 'Finalizado';
+  if (rawStep === 'comparado' || rawStep === 'email') return 'Comparando';
+  if (rawStep === 'enviando' || rawStep === 'moviendo' || rawStep === 'enviado' || rawStep === 'movido') return 'Comparando';
   return step;
 }
 
@@ -259,7 +301,7 @@ function canQueueItemBeCancelled(item) {
 }
 
 function isQueueTerminalSuccessStatus(status) {
-  return status === 'Finalizado';
+  return status === 'Completado';
 }
 
 function formatDurationFromSeconds(totalSeconds = 0) {
@@ -606,12 +648,15 @@ async function comparePendingFacturasIfReady() {
 */
 
 function enqueueUploadFlow(task, meta = {}) {
+  activeUploadFlows += 1;
   const runTask = async () => {
     const label = meta?.label || 'documentos';
     try {
       return await task();
     } catch (error) {
       throw error;
+    } finally {
+      activeUploadFlows -= 1;
     }
   };
 
@@ -850,7 +895,7 @@ async function invokeAnalyzeFilesBatchWithFallback(items = [], docType = 'albara
   });
 
   try {
-    const results = await ipcRenderer.invoke('analyze-files-batch', validItems, docType);
+    const results = await ipcRenderer.invoke('analyze-files-batch', validItems, docType, progressScope);
     if (Array.isArray(results) && results.length) {
       uiLog('log', 'invokeAnalyzeFilesBatchWithFallback:ok', {
         docType,
@@ -861,6 +906,8 @@ async function invokeAnalyzeFilesBatchWithFallback(items = [], docType = 'albara
     throw new Error('Batch IA sin resultados');
   } catch (error) {
     const message = String(error?.message || '');
+    // Un fallo del lote no autoriza a reenviar documentos cuyo job ya puede existir.
+    if (progressScope || !message.includes("No handler registered for 'analyze-files-batch'")) throw error;
     if (!message.includes("No handler registered for 'analyze-files-batch'")) {
       console.warn('Batch IA falló en renderer; fallback individual:', error);
     }
@@ -2784,8 +2831,7 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
       const docType = 'auto';
       const parentFolder = await findFolderByName('Albaranes', true);
       if (!parentFolder) {
-        showStatus('No se encontró la estructura de documentos en Drive.', 'error');
-        return;
+        throw new Error('No se encontró la estructura de documentos en Drive.');
       }
 
       const target = await getOrCreateNoProcesadoFolder(parentFolder.id);
@@ -2808,8 +2854,7 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
         facturasDocumentosFolder = await getOrCreateChildFolder(facturasFolder.id, 'Documentos');
       } catch (folderError) {
         console.warn('No se pudo preparar la estructura de documentos:', folderError);
-        showStatus('No se pudo preparar la estructura de documentos en Drive.', 'error', folderError?.message || '');
-        return;
+        throw folderError;
       }
 
       const preparedItems = [];
@@ -2830,6 +2875,11 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
         }
 
         try {
+          const recovered = preQueuedItems?.[fileIndex];
+          if (recovered?.preparedItem) {
+            preparedItems.push(recovered.preparedItem);
+            continue;
+          }
           const mimeType = guessMimeTypeFromPath(p);
           updateQueueStep(queueId, 'Comprobando duplicado');
           showStatus(`Comprobando si ${fileName} ya fue procesado...`, 'loading');
@@ -2861,6 +2911,8 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
             uploadResult,
             uploadedFileId: uploadResult?.file?.id || uploadResult?.fileId || uploadResult?.id
           });
+          await saveQueueProgress(queueId, { preparedItem: preparedItems[preparedItems.length - 1] });
+          updateQueueStep(queueId, 'En cola');
         } catch (error) {
           markQueueError(queueId, error.message || 'Error desconocido');
           showStatus(`Error al subir ${fileName}: ${error.message}`, 'error');
@@ -2885,34 +2937,35 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
             return;
           }
 
-          updateQueueStep(item.queueId, 'IA');
+          updateQueueStep(item.queueId, 'En cola');
           itemsForIA.push(item);
         });
 
-        const batchResults = await invokeAnalyzeFilesBatchWithFallback(
-          itemsForIA.map(item => ({
-            filePath: item.filePath,
-            mimeType: item.mimeType,
-            originalName: item.fileName,
-            queueId: item.queueId,
-            postProcess: {
-              sourceDriveFileId: item.uploadedFileId || null,
-              sourceDriveFromFolderId: target?.id || null,
-              sourceFileName: item.fileName,
-              fileSha256: item.fileSha256 || null,
-              fileSize: item.fileSize ?? null,
-              facturaSourceDriveToFolderId: facturasNoComparadoFolder?.id || null,
-              albaranSourceDriveToFolderId: noComparadoFolder?.id || null
-            }
-          })),
-          docType
-        );
-
-        for (let idx = 0; idx < itemsForIA.length; idx += 1) {
-          const item = itemsForIA[idx];
-          const analysisResult = batchResults[idx] || null;
-
+        for (const item of itemsForIA) {
           try {
+            if (canceledQueueIds.has(item.queueId)) continue;
+            await progressWriteTail;
+            const batchResults = await invokeAnalyzeFilesBatchWithFallback(
+              [{
+                filePath: item.filePath,
+                mimeType: item.mimeType,
+                originalName: item.fileName,
+                queueId: item.queueId,
+                postProcess: {
+                  sourceDriveFileId: item.uploadedFileId || null,
+                  sourceDriveFromFolderId: target?.id || null,
+                  sourceFileName: item.fileName,
+                  fileSha256: item.fileSha256 || null,
+                  fileSize: item.fileSize ?? null,
+                  facturaSourceDriveToFolderId: facturasNoComparadoFolder?.id || null,
+                  albaranSourceDriveToFolderId: noComparadoFolder?.id || null
+                }
+              }],
+              docType
+            );
+
+            const analysisResult = batchResults[0] || null;
+
             // Si fue cancelado durante la IA (resultado devuelto como cancelled)
             if (analysisResult?.cancelled) {
               markQueueCancelled(item.queueId, 'Cancelado por el usuario');
@@ -2944,6 +2997,7 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
             });
 
             const analysisText = analysisResult.analysis || analysisResult?.raw?.analysis || '';
+            queueFilePathMap.delete(item.queueId);
 
             if (canceledQueueIds.has(item.queueId)) {
               markQueueCancelled(item.queueId);
@@ -3247,6 +3301,8 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
             });
             markQueueError(item.queueId, error.message || 'Error desconocido');
             showStatus(`Error al procesar ${item.fileName}: ${error.message}`, 'error');
+          } finally {
+            await progressWriteTail;
           }
         }
 
@@ -3254,6 +3310,11 @@ async function uploadFilesToFolder(parentFolderName, selectedFilePaths = null) {
     }
   } catch (error) {
     uiLog('error', 'uploadFilesToFolder:error', serializeUiError(error));
+    for (const item of selectedFilePaths || []) {
+      if (item?.queueId && !TERMINAL_QUEUE_STATUSES.has(uploadQueue.get(item.queueId)?.status)) {
+        markQueueError(item.queueId, error.message || 'Error al preparar documento');
+      }
+    }
     showStatus('Error al subir archivo: ' + error.message, 'error');
   }
 }
@@ -3264,6 +3325,7 @@ function queueUploadsAsWaiting(parentFolderName, filePaths = []) {
     const fileName = pathBasename(filePath);
     const queueId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     initQueueItem(queueId, fileName, { docType });
+    saveQueueProgress(queueId, { filePath, fileName, parentFolderName, status: 'En cola' });
     return { filePath, fileName, queueId };
   });
 }
@@ -3283,8 +3345,14 @@ async function scheduleUploadFlow(parentFolderName, selectedFilePaths = null, so
   }
 
   const queuedItems = queueUploadsAsWaiting(parentFolderName, filePaths);
+  await progressWriteTail;
   await enqueueUploadFlow(
-    () => uploadFilesToFolder(parentFolderName, queuedItems),
+    async () => {
+      for (const item of queuedItems) {
+        await uploadFilesToFolder(parentFolderName, [item]);
+        await progressWriteTail;
+      }
+    },
     { label: parentFolderName }
   );
 }
@@ -3843,6 +3911,7 @@ async function showUploadSection(info) {
   uiLog('log', 'showUploadSection:start', { email: info?.email });
   showSection('upload');
   document.getElementById('user-email').textContent = info.email;
+  await restoreQueueProgress();
   try {
     const appVersion = await ipcRenderer.invoke('get-app-version');
     if (appVersionEl) {
@@ -4070,6 +4139,11 @@ if (backBtn) {
 // Cerrar sesión
 logoutBtn.addEventListener('click', async () => {
   uiLog('log', 'logout button:click');
+  if (activeUploadFlows > 0 || Array.from(uploadQueue.values()).some(item => !TERMINAL_QUEUE_STATUSES.has(item.status))) {
+    showStatus('Espera a que termine la cola o cancela los documentos antes de cambiar de cuenta.', 'error');
+    return;
+  }
+  await progressWriteTail;
   if (confirm('¿Estás seguro de que quieres cerrar sesión?')) {
     uiLog('log', 'logout confirmed');
     await ipcRenderer.invoke('logout');
@@ -4118,6 +4192,7 @@ ipcRenderer.on('updater-status', (event, payload) => {
 
 ipcRenderer.on('queue-event', (event, payload) => {
   if (!payload || !payload.id) return;
+  if (payload.scope && payload.scope !== progressScope) return;
   uiLog('log', 'event:queue-event', {
     id: payload.id,
     type: payload.type,
@@ -4136,6 +4211,7 @@ ipcRenderer.on('queue-event', (event, payload) => {
   }
 
   if (payload.type === 'step') {
+    if (payload.step === 'Comparando' || payload.step === 'Completado') queueFilePathMap.delete(payload.id);
     updateQueueStep(payload.id, payload.step);
     return;
   }
@@ -4160,6 +4236,7 @@ function updateQueueStep(id, step) {
   item.status = normalizedStep;
   item.error = null;
   uploadQueue.set(id, item);
+  saveQueueProgress(id, { status: item.status, error: null });
   if (!canQueueItemBeSelectedForBulkCancel(item)) {
     selectedQueueIds.delete(id);
   }
@@ -4172,6 +4249,7 @@ function markQueueCancelled(id, message = 'Cancelado por el usuario') {
   item.status = 'Cancelado';
   item.error = message;
   uploadQueue.set(id, item);
+  saveQueueProgress(id, { status: 'Cancelado', error: message });
   canceledQueueIds.add(id);
   selectedQueueIds.delete(id);
 
@@ -4209,9 +4287,11 @@ function requestCancelQueueItem(id) {
 function markQueueError(id, message) {
   const item = uploadQueue.get(id);
   if (!item) return;
+  if (item.status === 'Cancelado') return;
   item.status = 'Error';
   item.error = message || 'Error';
   uploadQueue.set(id, item);
+  saveQueueProgress(id, { status: 'Error', error: item.error });
   selectedQueueIds.delete(id);
   renderQueue();
 }
@@ -4328,6 +4408,11 @@ function renderQueue() {
     name.className = 'file-name';
     name.textContent = item.fileName;
     leftRow.appendChild(name);
+    const statusLabel = document.createElement('span');
+    statusLabel.className = 'queue-step';
+    statusLabel.textContent = item.status;
+    statusLabel.setAttribute('role', 'status');
+    leftRow.appendChild(statusLabel);
     headerRow.appendChild(leftRow);
 
     const statusRow = document.createElement('div');

@@ -7,6 +7,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const crypto = require('crypto');
+const { createAnalysisProgress, progressScope, queueStepForJob } = require('./lib/analysisProgress');
 const { spawn } = require('child_process');
 const {
   cleanAlbaranDisplayId,
@@ -1361,7 +1362,7 @@ function getAnalyzeEndpoint(docType) {
   return `${BACKEND_URL}${endpoint}`;
 }
 
-async function analyzeFileWithBackendIA(filePath, mimeType = '', originalName = '', docType = 'albaran', postProcess = null, queueId = null) {
+async function analyzeFileWithBackendIA(filePath, mimeType = '', originalName = '', docType = 'albaran', postProcess = null, queueId = null, scope = null) {
   const sessionId = store.get('sessionId');
   if (!sessionId) {
     throw new Error('Sesión requerida para analizar documento');
@@ -1376,6 +1377,12 @@ async function analyzeFileWithBackendIA(filePath, mimeType = '', originalName = 
 
   // 1) Flujo principal: enviar el ARCHIVO real al backend para que lo procese con OpenAI.
   try {
+    const saved = scope && queueId ? analysisProgress.get(scope, queueId) : null;
+    if (saved?.analysisResult?.success) return saved.analysisResult.raw;
+    if (saved?.jobId) {
+      activeJobsByQueueId.set(queueId, { jobId: saved.jobId });
+      return await pollJobResult(saved.jobId, { sessionId, queueId, scope });
+    }
     const formData = new FormData();
     formData.append('sessionId', sessionId);
     const pipeline = postProcess && typeof postProcess === 'object' ? postProcess : null;
@@ -1439,8 +1446,12 @@ async function analyzeFileWithBackendIA(filePath, mimeType = '', originalName = 
       // Registrar jobId para que cancel-queue-item pueda cancelarlo en el backend
       if (queueId) {
         activeJobsByQueueId.set(queueId, { jobId: directResponse.data.job_id });
+        if (scope) analysisProgress.save(scope, queueId, { jobId: directResponse.data.job_id });
+        if (pendingCancellations.has(queueId)) {
+          await axios.post(`${BACKEND_URL}/job/${directResponse.data.job_id}/cancel`, { sessionId }, { timeout: 10000 });
+        }
       }
-      const jobResult = await pollJobResult(directResponse.data.job_id, { sessionId });
+      const jobResult = await pollJobResult(directResponse.data.job_id, { sessionId, queueId, scope });
       mainLog('info', 'analyzeFileWithBackendIA:job-done', {
         jobId: directResponse.data.job_id,
         hasAnalysis: Boolean(jobResult?.analysis)
@@ -1657,6 +1668,20 @@ async function pollJobResult(jobId, options = {}) {
       });
 
       const job = response.data;
+      const step = queueStepForJob(job.status);
+      if (options.queueId && step) {
+        if (options.scope) {
+          const patch = { status: step, error: job.error || null };
+          if (job.status === 'done') {
+            patch.analysisResult = { success: true, analysis: job.result?.analysis || '', raw: job.result };
+          }
+          analysisProgress.save(options.scope, options.queueId, patch);
+        }
+        emitToRenderer('queue-event', {
+          type: job.status === 'error' ? 'error' : 'step',
+          id: options.queueId, step, message: job.error, scope: options.scope
+        });
+      }
 
       if (job.status === 'done') {
         mainLog('info', 'pollJobResult:done', { jobId, attempt });
@@ -1756,7 +1781,7 @@ async function moveDriveFilesWithBackoff(moves = [], options = {}) {
   return results;
 }
 
-async function analyzeFilesWithBackendIABatch(items = [], docType = 'albaran') {
+async function analyzeFilesWithBackendIABatch(items = [], docType = 'albaran', scope = null) {
   const validItems = (Array.isArray(items) ? items : []).filter(item => item?.filePath);
   if (!validItems.length) return [];
 
@@ -1772,6 +1797,7 @@ async function analyzeFilesWithBackendIABatch(items = [], docType = 'albaran') {
     // Comprobar cancelación ANTES de enviar el archivo a la IA
     if (queueId && pendingCancellations.has(queueId)) {
       mainLog('info', 'analyzeFilesWithBackendIABatch:cancelled-before-submit', { queueId });
+      if (scope) analysisProgress.save(scope, queueId, { status: 'Cancelado', error: 'Cancelado por el usuario' });
       pendingCancellations.delete(queueId);
       results.push({ success: false, cancelled: true, analysis: '', error: 'Cancelado por el usuario' });
       continue;
@@ -1784,10 +1810,19 @@ async function analyzeFilesWithBackendIABatch(items = [], docType = 'albaran') {
         item.originalName || '',
         docType,
         item.postProcess || null,
-        queueId
+        queueId,
+        scope
       );
-      results.push({ success: true, analysis: single?.analysis || '', raw: single });
+      const result = { success: true, analysis: single?.analysis || '', raw: single };
+      if (scope && queueId) analysisProgress.save(scope, queueId, { analysisResult: result });
+      results.push(result);
     } catch (error) {
+      if (scope && queueId) {
+        analysisProgress.save(scope, queueId, {
+          status: error.cancelled ? 'Cancelado' : 'Error',
+          error: error.message || String(error)
+        });
+      }
       if (error.cancelled) {
         results.push({ success: false, cancelled: true, analysis: '', error: 'Cancelado por el usuario' });
       } else {
@@ -2019,6 +2054,21 @@ const store = new Store({
   // Mantener siempre un almacenamiento estable para que la sesión sobreviva
   // entre reinicios de la app.
   name: 'config'
+});
+const analysisProgress = createAnalysisProgress(new Store({ name: 'analysis-progress' }));
+let activeProgressScope = null;
+
+ipcMain.handle('analysis-progress-load', async () => {
+  const info = await refreshSessionTokens('primary');
+  activeProgressScope = progressScope(BACKEND_URL, info?.organizationId, info?.email);
+  return { scope: activeProgressScope, items: analysisProgress.list(activeProgressScope) };
+});
+
+ipcMain.handle('analysis-progress-save', async (event, scope, queueId, patch) => {
+  if (!store.get('sessionId') || !scope || scope !== activeProgressScope) {
+    throw new Error('La sesión de la cola ha cambiado');
+  }
+  return analysisProgress.save(scope, queueId, patch);
 });
 let mainWindow;
 let billingMonitorInterval = null;
@@ -2922,9 +2972,10 @@ ipcMain.handle('analyze-file', async (event, filePath, mimeType = '', originalNa
   }
 });
 
-ipcMain.handle('analyze-files-batch', async (event, items = [], docType = 'albaran') => {
+ipcMain.handle('analyze-files-batch', async (event, items = [], docType = 'albaran', scope = null) => {
   try {
-    return await analyzeFilesWithBackendIABatch(items, docType);
+    if (scope && scope !== activeProgressScope) throw new Error('La sesión de la cola ha cambiado');
+    return await analyzeFilesWithBackendIABatch(items, docType, scope);
   } catch (error) {
     console.error('Error analizando archivos en batch con IA:', error);
     throw new Error(error.response?.data?.error || error.message || 'Error al analizar documentos en batch con IA');
@@ -4406,6 +4457,7 @@ async function scanNoProcesado(trigger = 'startup') {
 
 // Cerrar sesión
 ipcMain.handle('logout', async () => {
+  activeProgressScope = null;
   const sessionId = store.get('sessionId');
   const refreshToken = store.get('refreshToken') || null;
 
