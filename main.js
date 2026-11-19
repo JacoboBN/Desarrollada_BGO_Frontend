@@ -2015,9 +2015,21 @@ const analysisProgress = createAnalysisProgress(new Store({ name: 'analysis-prog
 let activeProgressScope = null;
 
 ipcMain.handle('analysis-progress-load', async () => {
-  const info = await refreshSessionTokens('primary');
-  activeProgressScope = progressScope(BACKEND_URL, info?.organizationId, info?.email);
-  return { scope: activeProgressScope, items: analysisProgress.list(activeProgressScope) };
+  activeProgressScope = null;
+  try {
+    const info = await refreshSessionTokens('primary');
+    if (!info) return null;
+    activeProgressScope = progressScope(BACKEND_URL, info.organizationId, info.email);
+    return {
+      email: info.email,
+      scope: activeProgressScope,
+      items: analysisProgress.list(activeProgressScope)
+    };
+  } catch (error) {
+    if (error?.response?.status !== 401) throw error;
+    setStoredAuth({ sessionId: null, refreshToken: null });
+    return null;
+  }
 });
 
 ipcMain.handle('analysis-progress-save', async (event, scope, queueId, patch) => {
@@ -2175,15 +2187,12 @@ ipcMain.handle('google-login', async (event, isUser = false, purpose = 'primary'
     
     const { authUrl, sessionId } = response.data;
     
-    // Guardar sessionId temporal según propósito
-    setStoredAuth({ sessionId, refreshToken: null }, purpose);
-    
     // Abrir navegador externo para login
     await shell.openExternal(authUrl);
     
     // Esperar a que el usuario complete el login (polling)
-    const userData = await waitForAuth(sessionId, 60, purpose);
-    const verifiedSessionId = userData?.sessionId || sessionId;
+    const userData = await waitForAuth(sessionId);
+    const verifiedSessionId = userData.sessionId;
     const verifiedRefreshToken = userData?.refreshToken || null;
     setStoredAuth({
       sessionId: verifiedSessionId,
@@ -2231,24 +2240,16 @@ ipcMain.handle('google-login', async (event, isUser = false, purpose = 'primary'
 });
 
 // Función para esperar autenticación
-async function waitForAuth(sessionId, maxAttempts = 60, purpose = 'primary') {
+async function waitForAuth(sessionId, maxAttempts = 60) {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
 
     try {
-      const { refreshToken } = getStoredAuth(purpose);
       const response = await axios.post(`${BACKEND_URL}/auth/verify`, {
-        sessionId,
-        refreshToken
+        sessionId
       });
 
-      if (response.data.email) {
-        if (response?.data?.sessionId || response?.data?.refreshToken) {
-          setStoredAuth({
-            sessionId: response?.data?.sessionId,
-            refreshToken: response?.data?.refreshToken
-          }, purpose);
-        }
+      if (response.data.email && response.data.sessionId) {
         return response.data;
       }
     } catch (error) {

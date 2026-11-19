@@ -14,8 +14,7 @@ function saveQueueProgress(queueId, patch) {
   return progressWriteTail;
 }
 
-async function restoreQueueProgress() {
-  const saved = await ipcRenderer.invoke('analysis-progress-load');
+function restoreQueueProgress(saved) {
   if (progressScope === saved.scope) return;
   progressScope = saved.scope;
   progressWriteTail = Promise.resolve();
@@ -2753,7 +2752,7 @@ loginBtn.addEventListener('click', async () => {
 
     await ipcRenderer.invoke('google-login', false);
     uiLog('log', 'login button:google-login:ok');
-    checkSession({ forceBillingSetup: true });
+    await checkSession();
 
   } catch (error) {
     uiLog('error', 'login button:google-login:error', serializeUiError(error));
@@ -2764,11 +2763,18 @@ loginBtn.addEventListener('click', async () => {
   }
 });
 
-async function checkSession({ forceBillingSetup = false } = {}) {
-  uiLog('log', 'checkSession:start', { forceBillingSetup });
-  const info = await ipcRenderer.invoke('get-user-info');
+async function checkSession() {
+  uiLog('log', 'checkSession:start');
+  loginBtn.disabled = true;
+  try {
+    const info = await ipcRenderer.invoke('analysis-progress-load');
+    if (!info) {
+      uiLog('warn', 'checkSession:no-active-session');
+      showSection('login');
+      document.getElementById('status').style.display = 'none';
+      return;
+    }
 
-  if (info && info.email) {
     uiLog('log', 'checkSession:session-found', { email: info.email });
     try {
       toggleStartupOverlay(true, 'Comprobando carpetas estándar en Drive...');
@@ -2789,11 +2795,15 @@ async function checkSession({ forceBillingSetup = false } = {}) {
     // Se omiten setup de monitor de facturas por email y escaneo inicial de carpetas.
     toggleStartupOverlay(false);
     setBillingEmailLabel(info?.email || null);
-    showUploadSection(info);
-  } else {
-    uiLog('warn', 'checkSession:no-active-session');
+    await showUploadSection(info);
+  } catch (error) {
+    uiLog('error', 'checkSession:error', serializeUiError(error));
     showSection('login');
+    showStatus('No se pudo abrir la sesión. Vuelve a intentarlo.', 'error');
+  } finally {
     toggleStartupOverlay(false);
+    loginBtn.textContent = 'Iniciar sesión con Google';
+    loginBtn.disabled = false;
   }
 }
 
@@ -3911,7 +3921,7 @@ async function showUploadSection(info) {
   uiLog('log', 'showUploadSection:start', { email: info?.email });
   showSection('upload');
   document.getElementById('user-email').textContent = info.email;
-  await restoreQueueProgress();
+  restoreQueueProgress(info);
   try {
     const appVersion = await ipcRenderer.invoke('get-app-version');
     if (appVersionEl) {
