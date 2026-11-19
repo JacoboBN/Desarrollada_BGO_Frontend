@@ -18,6 +18,12 @@ Aplicación de escritorio Electron para gestionar facturas y albaranes con Googl
 
 ## Requisitos
 
+En la rama de pruebas, el envío documental reutiliza la clave de cada elemento de
+la cola (`queueId`) incluso si se pierde la respuesta HTTP. Cada reintento abre
+de nuevo el archivo; no se reutiliza un multipart consumido. La deduplicación
+requiere la versión del backend con `DOCUMENT_PROTECTED=1` y migración 007.
+Para staging establecer `BACKEND_URL` explícitamente y usar un perfil y Drive de pruebas.
+
 - Node.js/npm.
 - Windows para el build actualmente soportado.
 - Backend accesible por `BACKEND_URL` o por la URL de producción por defecto.

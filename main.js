@@ -1383,59 +1383,15 @@ async function analyzeFileWithBackendIA(filePath, mimeType = '', originalName = 
       activeJobsByQueueId.set(queueId, { jobId: saved.jobId });
       return await pollJobResult(saved.jobId, { sessionId, queueId, scope });
     }
-    const formData = new FormData();
-    formData.append('sessionId', sessionId);
-    const pipeline = postProcess && typeof postProcess === 'object' ? postProcess : null;
-    if (pipeline?.txtFolderId) {
-      formData.append('postProcessTxtFolderId', String(pipeline.txtFolderId));
-    }
-    if (pipeline?.sourceDriveFileId) {
-      formData.append('postProcessSourceDriveFileId', String(pipeline.sourceDriveFileId));
-    }
-    if (pipeline?.sourceDriveFromFolderId) {
-      formData.append('postProcessSourceDriveFromFolderId', String(pipeline.sourceDriveFromFolderId));
-    }
-    if (pipeline?.sourceDriveToFolderId) {
-      formData.append('postProcessSourceDriveToFolderId', String(pipeline.sourceDriveToFolderId));
-    }
-    if (pipeline?.sourceFileName) {
-      formData.append('postProcessSourceFileName', String(pipeline.sourceFileName));
-    }
-    if (pipeline?.fileSha256) {
-      formData.append('fileSha256', String(pipeline.fileSha256));
-    }
-    if (pipeline?.fileSize !== undefined && pipeline?.fileSize !== null) {
-      formData.append('fileSize', String(pipeline.fileSize));
-    }
-    if (pipeline?.facturaTxtFolderId) {
-      formData.append('facturaTxtFolderId', String(pipeline.facturaTxtFolderId));
-    }
-    if (pipeline?.facturaSourceDriveToFolderId) {
-      formData.append('facturaSourceDriveToFolderId', String(pipeline.facturaSourceDriveToFolderId));
-    }
-    if (pipeline?.albaranTxtFolderId) {
-      formData.append('albaranTxtFolderId', String(pipeline.albaranTxtFolderId));
-    }
-    if (pipeline?.albaranSourceDriveToFolderId) {
-      formData.append('albaranSourceDriveToFolderId', String(pipeline.albaranSourceDriveToFolderId));
-    }
-    formData.append('file', fs.createReadStream(filePath), {
-      filename: originalName || path.basename(filePath),
-      contentType: mimeType || undefined
-    });
-
+    const p = postProcess || {};
+    const fields = {sessionId, postProcessTxtFolderId:p.txtFolderId,
+      postProcessSourceDriveFileId:p.sourceDriveFileId, postProcessSourceDriveFromFolderId:p.sourceDriveFromFolderId,
+      postProcessSourceDriveToFolderId:p.sourceDriveToFolderId, postProcessSourceFileName:p.sourceFileName,
+      fileSha256:p.fileSha256, fileSize:p.fileSize, facturaTxtFolderId:p.facturaTxtFolderId,
+      facturaSourceDriveToFolderId:p.facturaSourceDriveToFolderId, albaranTxtFolderId:p.albaranTxtFolderId,
+      albaranSourceDriveToFolderId:p.albaranSourceDriveToFolderId};
     const fileEndpoint = getAnalyzeEndpoint(docType);
-    const directResponse = await postWithRetry(fileEndpoint, formData, {
-      timeout: 30000, // Timeout corto: solo espera el job_id, no el procesamiento completo
-      retries: 1,
-      axiosOptions: {
-        headers: {
-          ...formData.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
-      }
-    });
+    const directResponse = await require('./lib/submitDocument')({url:fileEndpoint,fields,filePath,mimeType,originalName,queueId});
 
     // Flujo asíncrono (nuevo): el backend devuelve { job_id } inmediatamente
     if (directResponse?.data?.job_id) {
